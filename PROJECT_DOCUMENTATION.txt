@@ -1,0 +1,564 @@
+================================================================================
+   MISSING PERSON IDENTIFICATION SYSTEM — COMPLETE PROJECT DOCUMENTATION
+   Phase 1: Face Detection & Recognition | Phase 2: CCTV Video Analysis
+================================================================================
+
+TABLE OF CONTENTS
+─────────────────
+1. Project Overview
+2. How It Works (Big Picture)
+3. Phase 1 — Face Detection & Recognition (Pre-Built)
+4. Phase 2 — CCTV Video Analysis (What We Built)
+5. File-by-File Explanation
+6. How to Run the Project (Step-by-Step)
+7. How to Use Your Own Photos & Videos
+8. Technologies Used
+9. Key Concepts Explained
+10. Troubleshooting
+
+================================================================================
+1. PROJECT OVERVIEW
+================================================================================
+
+This project is a Missing Person Identification System that uses Artificial
+Intelligence to find missing people in CCTV footage.
+
+The system works in two phases:
+
+  PHASE 1: Takes a photo of a person, detects the face, and creates a unique
+           numerical "fingerprint" (called an embedding) of that face.
+
+  PHASE 2: Takes a CCTV video, scans each frame for faces, compares every
+           detected face against a database of missing persons, and flags
+           matches with bounding boxes and similarity scores.
+
+Think of it like this:
+  - Phase 1 teaches the computer what each missing person looks like.
+  - Phase 2 uses that knowledge to search through video footage.
+
+
+================================================================================
+2. HOW IT WORKS (BIG PICTURE)
+================================================================================
+
+The pipeline follows this flow:
+
+  ┌─────────────────┐
+  │  Missing Person  │
+  │     Photo        │──────> Face Detection ──> Face Embedding (512 numbers)
+  └─────────────────┘                                    │
+                                                         │ Store in Database
+                                                         ▼
+                                               ┌──────────────────┐
+                                               │  missing_persons │
+                                               │     .json        │
+                                               └──────────────────┘
+                                                         │
+  ┌─────────────────┐                                    │ Compare
+  │   CCTV Video    │──> Motion Detection ──> Face       │
+  │   (MP4 file)    │    (skip static       Detection ──> Face Embedding
+  └─────────────────┘     frames)              │              │
+                                               │         Cosine Similarity
+                                               ▼              │
+                                        ┌──────────────┐      ▼
+                                        │  Annotated   │  Match? ──> match_log.json
+                                        │  Output MP4  │  (Green box = Match)
+                                        └──────────────┘  (Red box = Unknown)
+
+KEY CONCEPTS:
+  • Face Embedding: A face is converted into 512 numbers that uniquely
+    represent that person. Two photos of the same person will produce
+    similar numbers.
+
+  • Cosine Similarity: A mathematical way to compare two embeddings.
+    Score ranges from 0 to 1, where 1 = identical, 0 = completely different.
+    We use a threshold of 0.35 — anything above this is considered a match.
+
+  • Motion Detection: Instead of running expensive face recognition on EVERY
+    frame, we first check if anything moved. Static frames (no change) are
+    skipped, making the system much faster.
+
+
+================================================================================
+3. PHASE 1 — FACE DETECTION & RECOGNITION (Pre-Built)
+================================================================================
+
+Phase 1 was built before Phase 2 and provides the core AI capabilities.
+
+FOLDER STRUCTURE:
+  Phase 1/
+  ├── src/
+  │   ├── detector.py          — Face detection (finds faces in images)
+  │   ├── recognizer.py        — Face recognition (creates embeddings)
+  │   ├── similarity.py        — Compares two face embeddings
+  │   ├── pipeline.py          — Combines everything for 1-to-1 comparison
+  │   ├── test_detector.py     — Tests for detector
+  │   ├── test_recognizer.py   — Tests for recognizer
+  │   ├── test_similarity.py   — Tests for similarity
+  │   └── threshold_experiment.py — Experiment to find best threshold
+  ├── data/
+  │   ├── test/                — Test images (25 persons, 3 images each)
+  │   └── lfw-deepfunneled/    — Public face dataset for testing
+  └── results/                 — Output from Phase 1 tests
+
+
+FILE DETAILS:
+
+  detector.py (FaceDetector class)
+  ─────────────────────────────────
+  • Uses InsightFace's "buffalo_l" AI model to detect faces
+  • Input: An image (JPG, PNG, etc.)
+  • Output: List of detected faces with:
+      - Bounding box coordinates (x1, y1, x2, y2)
+      - Confidence score (0 to 1, how sure the AI is)
+      - Facial landmarks (eye positions, nose tip, mouth corners)
+      - Cropped face image
+  • Automatically tries GPU (CUDA) first, falls back to CPU
+  • Filters out low-confidence detections (default: below 0.5)
+
+  recognizer.py (FaceRecognizer class)
+  ─────────────────────────────────────
+  • Uses ArcFace model (w600k_r50) to create face embeddings
+  • Input: An image containing a face
+  • Output: A 512-dimensional vector (array of 512 numbers)
+  • This vector is L2-normalized (unit length), meaning:
+      - Cosine similarity = simple dot product
+      - Same person → vectors point in similar directions
+      - Different person → vectors point in different directions
+  • Can accept a full image or a cropped face
+
+  similarity.py (FaceSimilarity class)
+  ─────────────────────────────────────
+  • Compares two face embeddings using:
+      - Cosine Similarity: Score from -1 to 1 (higher = more similar)
+      - Euclidean Distance: Distance measure (lower = more similar)
+  • Can compare pairs, batches, or build full NxN matrices
+  • Includes input validation (checks for NaN, Inf, dimension mismatches)
+
+  pipeline.py (FaceMatchPipeline class)
+  ─────────────────────────────────────
+  • Combines detector + recognizer + similarity into one easy call
+  • Usage: Give it two image paths → get a match/no-match verdict
+  • Uses experimentally validated threshold: 0.3468
+  • Never crashes — returns error info instead of raising exceptions
+
+
+================================================================================
+4. PHASE 2 — CCTV VIDEO ANALYSIS (What We Built)
+================================================================================
+
+Phase 2 extends Phase 1 to work with video. Instead of comparing two photos,
+it searches through an entire CCTV video for missing persons.
+
+FOLDER STRUCTURE:
+  phase2/
+  ├── create_test_video.py     — Generates a test CCTV video
+  ├── src/
+  │   ├── __init__.py          — Package initialization
+  │   ├── phase1_bridge.py     — Connects Phase 2 to Phase 1 code
+  │   ├── database.py          — Missing person database
+  │   ├── video_processor.py   — Video reading/writing
+  │   ├── motion_detector.py   — Motion detection between frames
+  │   ├── cctv_search.py       — Main CCTV search pipeline
+  │   └── demo_cctv.py         — Complete demo script
+  ├── videos/
+  │   ├── input/               — Place input videos here
+  │   │   └── test_cctv.mp4    — Generated test video
+  │   └── output/              — Annotated output videos appear here
+  │       └── annotated_cctv.mp4
+  ├── data/
+  │   └── missing_persons.json — Database of missing person embeddings
+  └── results/
+      └── match_log.json       — Detection results log
+
+
+================================================================================
+5. FILE-BY-FILE EXPLANATION (Phase 2)
+================================================================================
+
+─────────────────────────────────────────────────────────────
+FILE 1: phase2/create_test_video.py
+─────────────────────────────────────────────────────────────
+PURPOSE: Creates a synthetic test CCTV video when real footage is unavailable.
+
+HOW IT WORKS:
+  1. Scans the Phase 1 test image folder (Phase 1/data/test/)
+  2. Finds all images (JPG, PNG, etc.) across all person folders
+  3. For each image:
+     - Resizes it to 640×480 pixels (standard CCTV resolution)
+     - Writes it 3 times to simulate a static CCTV scene
+  4. Creates an MP4 video at 5 FPS using the mp4v codec
+  5. Result: 75 images × 3 repeats = 225 frames = 45 seconds of video
+
+WHY 3 REPEATS?
+  In real CCTV, a person stands still for a few frames. By repeating each
+  image 3 times, we simulate this. It also tests that our motion detector
+  correctly identifies when the scene changes (every 3rd frame).
+
+OUTPUT: phase2/videos/input/test_cctv.mp4
+
+COMMAND TO RUN:
+  python phase2/create_test_video.py
+
+
+─────────────────────────────────────────────────────────────
+FILE 2: phase2/src/phase1_bridge.py
+─────────────────────────────────────────────────────────────
+PURPOSE: Safely imports Phase 1 classes into Phase 2 code.
+
+THE PROBLEM:
+  The folder "Phase 1" has a space in its name, which Python doesn't allow
+  as a package name. Normal "import" statements won't work.
+
+THE SOLUTION:
+  Uses Python's importlib.util module to load Phase 1 modules by their
+  exact file path. This avoids fragile sys.path hacks and works regardless
+  of where you run the code from.
+
+WHAT IT PROVIDES:
+  After importing this file, Phase 2 code can use:
+  • FaceDetector (from Phase 1's detector.py)
+  • FaceRecognizer (from Phase 1's recognizer.py)
+  • FaceSimilarity (from Phase 1's similarity.py)
+
+USAGE IN OTHER FILES:
+  from phase2.src.phase1_bridge import FaceDetector, FaceRecognizer, FaceSimilarity
+
+
+─────────────────────────────────────────────────────────────
+FILE 3: phase2/src/database.py (MissingPersonDB class)
+─────────────────────────────────────────────────────────────
+PURPOSE: Stores and manages missing person records with their face embeddings.
+
+HOW IT WORKS:
+  • Each person record contains:
+      - person_id: Unique identifier (e.g., "P001")
+      - name: Person's name
+      - age: Person's age
+      - photo_path: Path to their reference photo
+      - embedding: 512-number face fingerprint
+
+  • Data is saved as a JSON file at phase2/data/missing_persons.json
+  • NumPy arrays (embeddings) are converted to plain Python lists for JSON
+    storage, and converted back to NumPy arrays when loaded
+
+KEY METHODS:
+  • add_person(id, name, age, embedding, photo_path) — Add a person
+  • get_person(id) — Retrieve one person's record
+  • get_all_embeddings() — Get all embeddings for comparison
+  • save() — Write database to disk
+  • load() — Read database from disk
+  • clear() — Remove all records
+
+ERROR HANDLING:
+  • Handles missing, empty, or corrupt JSON files gracefully
+  • Rejects blank person IDs
+  • Starts with an empty database if the file doesn't exist
+
+
+─────────────────────────────────────────────────────────────
+FILE 4: phase2/src/video_processor.py (VideoProcessor class)
+─────────────────────────────────────────────────────────────
+PURPOSE: Reads input MP4 videos frame-by-frame and creates output videos.
+
+HOW IT WORKS:
+  1. Opens an MP4 file using OpenCV's VideoCapture
+  2. Reads video properties: FPS, width, height, total frame count
+  3. Provides frames one at a time via get_frame()
+  4. Tracks the current timestamp via get_frame_timestamp()
+  5. Can create an output video writer with matching dimensions
+
+KEY METHODS:
+  • get_frame() — Returns the next BGR frame, or None at end of video
+  • get_frame_timestamp() — Returns current time in seconds
+  • create_output_video(path) — Creates an mp4v writer for output
+  • reset() — Seek back to the first frame
+  • close() — Release video resources
+
+PROPERTIES:
+  • fps — Frames per second (e.g., 5.0)
+  • width — Frame width in pixels (e.g., 640)
+  • height — Frame height in pixels (e.g., 480)
+  • total_frames — Total number of frames in the video
+
+
+─────────────────────────────────────────────────────────────
+FILE 5: phase2/src/motion_detector.py (MotionDetector class)
+─────────────────────────────────────────────────────────────
+PURPOSE: Detects motion between consecutive video frames to skip static ones.
+
+WHY THIS MATTERS:
+  Face detection + recognition is computationally expensive (~2 seconds per
+  frame on CPU). In real CCTV, most frames are static (nothing moves). By
+  detecting motion first, we only run the expensive AI on frames where
+  something changed — making the system much faster.
+
+HOW IT WORKS:
+  1. Convert current frame to grayscale
+  2. Apply Gaussian blur (removes sensor noise)
+  3. Compare with previous frame using cv2.absdiff (absolute difference)
+  4. Threshold: pixels that changed more than 25 intensity levels are "changed"
+  5. If more than 0.5% of total pixels changed → motion detected
+
+CONFIGURABLE PARAMETERS:
+  • pixel_threshold (default: 25) — How much a pixel must change to count
+  • area_threshold (default: 0.005) — What fraction of pixels must change
+  • blur_kernel (default: 21×21) — Size of noise-reduction blur
+
+RETURNS:
+  • has_motion: True/False
+  • changed_pixels: Integer count (useful for tuning thresholds)
+
+DEMO RESULTS:
+  In our test video (225 frames), 74 frames had motion (33%).
+  The other 151 static frames were skipped — saving significant processing time.
+
+
+─────────────────────────────────────────────────────────────
+FILE 6: phase2/src/cctv_search.py (CCTVSearchPipeline class)
+─────────────────────────────────────────────────────────────
+PURPOSE: The CORE of Phase 2 — orchestrates the entire CCTV detection flow.
+
+HOW IT WORKS (for each frame of the video):
+  1. READ the frame from the input video
+  2. CHECK for motion (skip if static)
+  3. DETECT all faces in the motion frame (using Phase 1 FaceDetector)
+  4. GENERATE an embedding for each detected face (using Phase 1 FaceRecognizer)
+  5. COMPARE each embedding against ALL missing persons in the database
+     (using Phase 1 FaceSimilarity — cosine similarity)
+  6. Find the BEST match (highest similarity score)
+  7. If score >= threshold (0.35):
+     → Draw GREEN bounding box with person's name and score
+     → Log the match (with cooldown to avoid duplicates)
+  8. If score < threshold:
+     → Draw RED bounding box with "Unknown" label
+  9. Draw timestamp on the frame
+  10. WRITE the frame to the output video (every frame, motion or not)
+
+COOLDOWN MECHANISM:
+  If Person A is detected at t=1.0s, and again at t=1.5s, t=2.0s, etc.,
+  we don't want 10 duplicate entries in the log. The cooldown (default: 5
+  seconds) ensures each person is logged at most once every 5 seconds.
+
+KEY METHODS:
+  • process_video(input_path, output_path) — Run the full pipeline
+  • save_match_log(matches, output_path) — Save results to JSON
+
+DRAWING:
+  • Green box + "Name (0.95)" for matches
+  • Red box + "Unknown" for unrecognized faces
+  • Timestamp "t=12.40s" in the top-right corner of every frame
+
+OUTPUT:
+  • Annotated MP4 video with bounding boxes
+  • List of match records (person_id, name, timestamp, frame, score)
+
+
+─────────────────────────────────────────────────────────────
+FILE 7: phase2/src/demo_cctv.py
+─────────────────────────────────────────────────────────────
+PURPOSE: Complete end-to-end demo that ties everything together.
+
+WHAT IT DOES:
+  1. Creates the MissingPersonDB
+  2. Clears any old demo data
+  3. Reads 3 demo people from Phase 1 test images:
+     • Person 01 — Phase 1/data/test/person_01/image_01.jpg
+     • Person 02 — Phase 1/data/test/person_02/image_01.jpg
+     • Person 03 — Phase 1/data/test/person_03/image_01.jpg
+  4. Generates face embeddings for each person using FaceRecognizer
+  5. Stores them in the database (missing_persons.json)
+  6. Runs CCTVSearchPipeline on test_cctv.mp4
+  7. Produces annotated_cctv.mp4 (video with bounding boxes)
+  8. Produces match_log.json (detection results)
+  9. Prints a summary showing all matches found
+
+CONFIGURATION (editable):
+  The DEMO_PEOPLE list at the top of the file controls which people are
+  loaded into the database. You can change this to use your own photos.
+
+COMMAND TO RUN:
+  python -m phase2.src.demo_cctv
+
+
+================================================================================
+6. HOW TO RUN THE PROJECT (Step-by-Step)
+================================================================================
+
+PREREQUISITES:
+  • Python 3.10 or higher
+  • Required packages: opencv-python, numpy, insightface, onnxruntime
+  • Install them with: pip install opencv-python numpy insightface onnxruntime
+
+STEP 1: Open a terminal/PowerShell and navigate to the project root:
+  cd "path\to\missing-person-identification"
+
+STEP 2: Generate the test video (only needed once):
+  python phase2/create_test_video.py
+
+  Expected output:
+    Test CCTV video created successfully
+    Source images: 75
+    Total frames: 225
+    Duration: 45.0 seconds
+
+STEP 3: Run the full demo:
+  python -m phase2.src.demo_cctv
+
+  This will take about 5 minutes on CPU (each frame requires AI inference).
+
+  Expected output:
+    DEMO COMPLETE
+    People in DB   : 3
+    Matches found  : 3
+    Output video   : phase2/videos/output/annotated_cctv.mp4
+    Match log      : phase2/results/match_log.json
+
+STEP 4: View the results:
+  • Open phase2/videos/output/annotated_cctv.mp4 in VLC or any video player
+  • Open phase2/results/match_log.json in any text editor
+
+DEMO RESULTS WE GOT:
+  • Person 01 — matched with 75.32% similarity at 0.60 seconds
+  • Person 02 — matched with 93.84% similarity at 1.80 seconds
+  • Person 03 — matched with 96.40% similarity at 3.60 seconds
+
+
+================================================================================
+7. HOW TO USE YOUR OWN PHOTOS & VIDEOS
+================================================================================
+
+TO ADD YOUR OWN MISSING PERSON:
+  1. Open phase2/src/demo_cctv.py in a text editor
+  2. Find the DEMO_PEOPLE list (around line 38)
+  3. Change it to your own data:
+
+     DEMO_PEOPLE = [
+         ("P001", "John Doe", 30, "path/to/johns_photo.jpg"),
+         ("P002", "Jane Smith", 25, "path/to/janes_photo.jpg"),
+     ]
+
+  4. The photo should show a clear, front-facing face
+  5. You can add as many people as you want
+
+TO USE YOUR OWN CCTV VIDEO:
+  Option A: Replace the test video
+    - Copy your MP4 file to: phase2/videos/input/
+    - Rename it to: test_cctv.mp4
+
+  Option B: Change the path in code
+    - Open phase2/src/demo_cctv.py
+    - Change INPUT_VIDEO to your video path:
+      INPUT_VIDEO = PROJECT_ROOT / "path" / "to" / "your_video.mp4"
+
+  Then run: python -m phase2.src.demo_cctv
+
+ADJUSTING SENSITIVITY:
+  • If too many false matches: Increase MATCH_THRESHOLD (e.g., 0.45)
+  • If missing real matches: Decrease MATCH_THRESHOLD (e.g., 0.30)
+  • Edit this in demo_cctv.py: MATCH_THRESHOLD = 0.35
+
+
+================================================================================
+8. TECHNOLOGIES USED
+================================================================================
+
+  Technology          │ Purpose
+  ────────────────────┼─────────────────────────────────────────────
+  Python 3.10+        │ Programming language
+  OpenCV (cv2)        │ Image/video processing, drawing bounding boxes
+  NumPy               │ Numerical operations on embedding vectors
+  InsightFace         │ AI face detection (RetinaFace) and recognition
+  ArcFace (w600k_r50) │ Face embedding model (512-dim vectors)
+  ONNX Runtime        │ Neural network inference engine (CPU/GPU)
+  JSON                │ Data storage for database and match logs
+  pathlib             │ Cross-platform file path handling
+
+  AI MODEL: buffalo_l (InsightFace)
+  ─────────────────────────────────
+  • Detection model: RetinaFace (det_10g.onnx) — finds faces in images
+  • Recognition model: ArcFace w600k_r50 — creates 512-dim embeddings
+  • Trained on 600K identities with 10M+ images
+  • State-of-the-art accuracy for face recognition
+
+
+================================================================================
+9. KEY CONCEPTS EXPLAINED
+================================================================================
+
+FACE EMBEDDING
+  A face embedding is a vector of 512 numbers that represents a face.
+  The AI model learns to map faces to points in 512-dimensional space such
+  that:
+    • Same person → nearby points (high cosine similarity)
+    • Different people → distant points (low cosine similarity)
+  Example: [0.023, -0.156, 0.089, ..., 0.042] (512 values)
+
+COSINE SIMILARITY
+  Measures the angle between two vectors.
+    • 1.0 = identical direction (same person)
+    • 0.0 = perpendicular (completely different)
+    • Our threshold: 0.35 (anything above = potential match)
+
+  In our demo:
+    • Same person comparisons scored 0.75 to 0.96
+    • Different person comparisons scored near 0.00
+
+L2 NORMALIZATION
+  All embeddings are normalized to unit length (their magnitude = 1.0).
+  This ensures cosine similarity is equivalent to a simple dot product,
+  making comparisons fast and consistent.
+
+MOTION DETECTION (Frame Differencing)
+  1. Convert frame to grayscale (reduce to 1 channel)
+  2. Apply Gaussian blur (smooth out camera noise)
+  3. Subtract previous frame from current frame (pixel-wise)
+  4. Count pixels that changed by more than 25 intensity levels
+  5. If changed pixels > 0.5% of total → motion detected
+
+MATCH COOLDOWN
+  To prevent flooding the log with repeated detections of the same person:
+  • After logging Person A at t=5.0s, ignore re-detections until t=10.0s
+  • Cooldown period: 5 seconds (configurable)
+
+
+================================================================================
+10. TROUBLESHOOTING
+================================================================================
+
+  PROBLEM                    │ LIKELY CAUSE              │ FIX
+  ───────────────────────────┼───────────────────────────┼──────────────────────
+  "No module named           │ Missing Python packages   │ Run:
+  'insightface'"             │                           │ pip install insightface
+                             │                           │ onnxruntime opencv-python
+  ───────────────────────────┼───────────────────────────┼──────────────────────
+  No faces detected          │ Image too small or blurry │ Use clear, front-facing
+                             │                           │ photos at least 200x200px
+  ───────────────────────────┼───────────────────────────┼──────────────────────
+  Every face shows           │ Threshold too high or     │ Lower MATCH_THRESHOLD
+  "Unknown"                  │ bad reference photo       │ to 0.30 in demo_cctv.py
+  ───────────────────────────┼───────────────────────────┼──────────────────────
+  Wrong person matched       │ Threshold too low or      │ Raise MATCH_THRESHOLD
+                             │ similar looking people    │ to 0.45
+  ───────────────────────────┼───────────────────────────┼──────────────────────
+  Output MP4 won't play      │ Codec issue               │ Use VLC media player
+  ───────────────────────────┼───────────────────────────┼──────────────────────
+  Empty match_log.json       │ No matches found          │ Check that people in
+                             │                           │ DEMO_PEOPLE appear in
+                             │                           │ the input video
+  ───────────────────────────┼───────────────────────────┼──────────────────────
+  Very slow processing       │ Running on CPU            │ Normal: ~2s per frame
+                             │                           │ on CPU. Install CUDA
+                             │                           │ for GPU acceleration
+  ───────────────────────────┼───────────────────────────┼──────────────────────
+  ModuleNotFoundError:       │ Phase 1 files missing     │ Ensure "Phase 1/src/"
+  'detector'                 │                           │ directory exists at
+                             │                           │ project root
+  ───────────────────────────┼───────────────────────────┼──────────────────────
+
+================================================================================
+  END OF DOCUMENTATION
+  Project: Missing Person Identification System
+  Phase 1: Face Detection, Recognition & Similarity
+  Phase 2: CCTV Video Analysis Pipeline
+================================================================================
