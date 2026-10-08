@@ -1,11 +1,12 @@
 // import { useParams } from 'react-router-dom';
 import { Download, CheckCircle, AlertTriangle, FileText, Video, Archive } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
+import { apiUrl } from '../lib/api';
 
 export default function Results() {
   const { data: health } = useQuery({
     queryKey: ['health'],
-    queryFn: () => fetch('/api/health').then(res => res.json())
+    queryFn: () => fetch(apiUrl('/api/health')).then(res => res.json())
   });
 
   return (

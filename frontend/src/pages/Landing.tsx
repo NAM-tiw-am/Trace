@@ -2,11 +2,12 @@ import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ArrowRight, ShieldCheck, Zap, Users } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
+import { apiUrl } from '../lib/api';
 
 export default function Landing() {
   const { data: health } = useQuery({
     queryKey: ['health'],
-    queryFn: () => fetch('/api/health').then(res => res.json())
+    queryFn: () => fetch(apiUrl('/api/health')).then(res => res.json())
   });
 
   return (

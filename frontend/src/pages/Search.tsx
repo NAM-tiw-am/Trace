@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Upload, FileVideo, FileImage, Play, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { clsx } from 'clsx';
+import { apiUrl } from '../lib/api';
 
 export default function Search() {
   const navigate = useNavigate();
@@ -14,7 +15,7 @@ export default function Search() {
   // @ts-expect-error unused
   const { data: health } = useQuery({
     queryKey: ['health'],
-    queryFn: () => fetch('/api/health').then(res => res.json())
+    queryFn: () => fetch(apiUrl('/api/health')).then(res => res.json())
   });
 
   const handleStartSearch = async () => {
