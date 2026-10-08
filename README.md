@@ -1,161 +1,189 @@
-# Missing Person Identification System 🔍
+# TRACE — AI-Powered Missing Person Identification System 🔍
 
-An AI-powered system that identifies missing persons in CCTV footage using face detection, recognition, and real-time video analysis.
+Trace is an end-to-end missing-person identification system that leverages deep learning face recognition to search CCTV footage for appearances of a person and aggregates potential sightings with visual evidence snapshots and timestamps.
 
-## 🎯 What It Does
+---
 
-This project uses **InsightFace (ArcFace)** deep learning models to:
-1. **Detect faces** in images and video frames
-2. **Generate unique face embeddings** (512-dimensional numerical fingerprints)
-3. **Search CCTV footage** for missing persons by comparing face embeddings
-4. **Produce annotated video** with bounding boxes and match scores
+## 🎯 Target Architecture & Workflow
+
+```text
+Missing Person Photo
+        ↓
+Face Detection & Alignment
+        ↓
+Face Embedding (ArcFace 512-D via InsightFace buffalo_l)
+        ↓
+Store Person + Embedding in PostgreSQL (+ pgvector)
+        ↓
+Upload CCTV Video
+        ↓
+Process Video (OpenCV + Frame Differencing Motion Detection)
+        ↓
+Detect Faces in Motion Frames
+        ↓
+Generate Query Embeddings
+        ↓
+pgvector Cosine Search (<=> Operator)
+        ↓
+Sighting Event Aggregator (Avoid Duplicate Detections across consecutive frames)
+        ↓
+Create Sighting Record + Evidence Snapshot
+        ↓
+Investigator Dashboard (Review, Confirm, Reject)
+```
+
+---
 
 ## 📂 Project Structure
 
-```
-missing-person-identification/
-├── Phase 1/                        # Core AI modules
-│   ├── src/
-│   │   ├── detector.py             # Face detection (InsightFace RetinaFace)
-│   │   ├── recognizer.py           # Face embedding (ArcFace w600k_r50)
-│   │   ├── similarity.py           # Embedding comparison (cosine similarity)
-│   │   ├── pipeline.py             # End-to-end face matching pipeline
-│   │   └── threshold_experiment.py # Threshold calibration
-│   └── data/test/                  # Test images (25 persons × 3 images)
+```text
+Trace/
 │
-├── phase2/                         # CCTV Video Analysis Pipeline
-│   ├── create_test_video.py        # Generate test CCTV video
-│   ├── src/
-│   │   ├── phase1_bridge.py        # Import bridge to Phase 1
-│   │   ├── database.py             # Missing person embedding database
-│   │   ├── video_processor.py      # MP4 video reader/writer
-│   │   ├── motion_detector.py      # Frame-difference motion detection
-│   │   ├── cctv_search.py          # Core CCTV search pipeline
-│   │   └── demo_cctv.py            # Complete demo script
-│   ├── videos/input/               # Input CCTV videos
-│   ├── videos/output/              # Annotated output videos
-│   ├── data/                       # Person embedding database (JSON)
-│   └── results/                    # Match logs (JSON)
+├── app/
+│   ├── main.py                  # FastAPI application entrypoint & lifespan
+│   │
+│   ├── api/                     # REST API Routers
+│   │   ├── health.py            # Health check (/api/health)
+│   │   ├── cases.py             # Cases CRUD (/api/cases)
+│   │   ├── persons.py           # Missing persons & photo uploads (/api/persons)
+│   │   ├── videos.py            # CCTV video upload & processing (/api/videos)
+│   │   ├── sightings.py         # Sighting retrieval & investigator review (/api/sightings)
+│   │   └── jobs.py              # Background processing jobs tracking (/api/jobs)
+│   │
+│   ├── core/                    # Core configuration & Database setup
+│   │   ├── config.py            # Pydantic Settings & environment variables
+│   │   └── database.py          # SQLAlchemy Session, pgvector & SQLite fallback
+│   │
+│   ├── models/                  # SQLAlchemy ORM Models
+│   │   ├── case.py              # Case model
+│   │   ├── person.py            # Person model
+│   │   ├── photo.py             # PersonPhoto model
+│   │   ├── embedding.py         # FaceEmbedding model (Vector 512)
+│   │   ├── video.py             # Video model
+│   │   ├── sighting.py          # Sighting model
+│   │   └── processing_job.py    # ProcessingJob model
+│   │
+│   ├── schemas/                 # Pydantic Schemas for Validation & Serialization
+│   │   ├── case.py
+│   │   ├── person.py
+│   │   ├── video.py
+│   │   ├── sighting.py
+│   │   └── processing_job.py
+│   │
+│   ├── services/                # Business & Orchestration Services
+│   │   ├── face_service.py      # Face detection & embedding extraction
+│   │   ├── video_service.py     # Video metadata parsing & registration
+│   │   ├── matching_service.py  # pgvector cosine distance search
+│   │   ├── storage_service.py   # File system storage for photos, videos, snapshots
+│   │   └── processing_service.py# Video frame iteration & background processing
+│   │
+│   └── ai/                      # Computer Vision & Deep Learning Layer
+│       ├── detector.py          # InsightFace RetinaFace face detector
+│       ├── recognizer.py        # ArcFace w600k_r50 embedding extractor
+│       ├── similarity.py        # Cosine similarity and Euclidean distance math
+│       ├── tracker.py           # SightingTracker event aggregator & deduplicator
+│       └── video_processor.py   # OpenCV video processor & motion detector
 │
-├── PROJECT_DOCUMENTATION.txt       # Detailed project documentation
-├── PHASE2_CCTV_AI_GUIDE.md         # Phase 2 implementation guide
-├── requirements.txt                # Python dependencies
-└── README.md                       # This file
+├── static/                      # Interactive Dashboard Frontend
+│   ├── index.html               # Modern surveillance dashboard UI
+│   ├── app.js                   # Client state, modals, video playback & polling
+│   └── styles.css               # Dark theme surveillance styling
+│
+├── storage/                     # File and object storage
+│   ├── photos/                  # Uploaded reference photos
+│   ├── videos/                  # CCTV footage files
+│   └── snapshots/               # Sighting evidence crops with bounding boxes
+│
+├── tests/
+│   └── test_api.py              # Unit & integration tests
+│
+├── scripts/
+│   └── seed_and_demo.py         # Complete end-to-end demonstration script
+│
+├── .env                         # Local environment configuration
+├── .env.example                 # Environment template
+├── docker-compose.yml           # PostgreSQL + pgvector + Backend container setup
+├── Dockerfile                   # Backend Docker image specification
+├── pytest.ini                   # Pytest configuration
+└── requirements.txt             # Project dependencies
 ```
 
-## 🔧 Installation
+---
 
-### Prerequisites
-- Python 3.10 or higher
-- pip (Python package manager)
+## ⚡ Quick Start
 
-### Setup
-
+### 1. Install Dependencies
 ```bash
-# Clone the repository
-git clone https://github.com/YOUR_USERNAME/missing-person-identification.git
-cd missing-person-identification
-
-# Install dependencies
 pip install -r requirements.txt
 ```
 
-## 🚀 How to Run
-
-### Step 1: Generate Test Video
+### 2. Run the End-to-End Demo Script
+Runs the complete MVP pipeline from creating a case, registering a missing person, extracting a 512-D ArcFace embedding, scanning CCTV footage, running vector matching, aggregating sightings, and saving snapshot evidence:
 ```bash
-python phase2/create_test_video.py
+python scripts/seed_and_demo.py
 ```
-Creates a synthetic CCTV video from test images (75 images → 225 frames @ 5 FPS).
 
-### Step 2: Run the CCTV Detection Demo
+### 3. Start the FastAPI Server & Web Dashboard
 ```bash
-python -m phase2.src.demo_cctv
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
-This will:
-- Load 3 test persons into the database
-- Scan the test video for their faces
-- Output an annotated video with bounding boxes
-- Save a JSON match log
+- **Web Dashboard**: Open [http://localhost:8000](http://localhost:8000) in your browser.
+- **Interactive API Docs (Swagger UI)**: Open [http://localhost:8000/docs](http://localhost:8000/docs).
+- **Alternative API Docs (ReDoc)**: Open [http://localhost:8000/redoc](http://localhost:8000/redoc).
 
-### Expected Output
-```
-DEMO COMPLETE
-People in DB   : 3
-Matches found  : 3
-Output video   : phase2/videos/output/annotated_cctv.mp4
-Match log      : phase2/results/match_log.json
+---
+
+## 🧪 Running Tests
+
+Run the test suite verifying API endpoints, vector mathematics, deduplication, photo uploads, and review workflows:
+```bash
+python -m pytest tests/ -v
 ```
 
-## 🖼️ Using Your Own Photos & Videos
+---
 
-### Add your own missing person
-Edit `phase2/src/demo_cctv.py` — change the `DEMO_PEOPLE` list:
+## 📡 API Overview
 
-```python
-DEMO_PEOPLE = [
-    ("P001", "Person Name", 25, "path/to/clear_face_photo.jpg"),
-]
+### Cases
+- `POST   /api/cases` — Create a case (`CASE-2026-001`)
+- `GET    /api/cases` — List all cases
+- `GET    /api/cases/{id}` — Get case details
+- `PUT    /api/cases/{id}` — Update case details
+- `DELETE /api/cases/{id}` — Delete case
+
+### Missing Persons & Reference Photos
+- `POST   /api/persons` — Register a missing person
+- `GET    /api/persons` — List missing persons
+- `GET    /api/persons/{id}` — Get person details with photos and embeddings
+- `PUT    /api/persons/{id}` — Update person
+- `DELETE /api/persons/{id}` — Delete person
+- `POST   /api/persons/{id}/photos` — Upload reference photo (extracts 512-D ArcFace embedding)
+- `GET    /api/persons/{id}/photos` — List person's photos
+- `DELETE /api/persons/{id}/photos/{photo_id}` — Delete photo and embedding
+
+### CCTV Videos & Video Processing
+- `POST   /api/videos` — Upload CCTV video (MP4)
+- `GET    /api/videos` — List CCTV videos
+- `GET    /api/videos/{id}` — Get video metadata (FPS, frame count, duration)
+- `POST   /api/videos/{id}/process` — Trigger background AI processing job
+- `GET    /api/jobs/{id}` — Check status and progress of processing job
+
+### Sightings & Verification Review
+- `GET    /api/sightings` — List sightings (filter by `person_id`, `video_id`, `match_status`)
+- `GET    /api/persons/{id}/sightings` — List all sightings for a specific person
+- `GET    /api/videos/{id}/sightings` — List all sightings found in a video
+- `GET    /api/sightings/{id}` — Get single sighting with snapshot & video links
+- `PUT    /api/sightings/{id}/status` — Update verification status (`POTENTIAL_MATCH`, `REVIEWED`, `CONFIRMED`, `REJECTED`)
+
+---
+
+## 🐳 Running with Docker & PostgreSQL + pgvector
+
+To run the complete production stack with PostgreSQL 16 and pgvector:
+
+```bash
+docker-compose up --build
 ```
-
-### Use your own CCTV video
-Place your MP4 file in `phase2/videos/input/` and rename it to `test_cctv.mp4`, or update the `INPUT_VIDEO` path in `demo_cctv.py`.
-
-## ⚙️ How It Works
-
-```
-Missing Person Photo → Face Detection → Face Embedding (512-d vector)
-                                              ↓
-                                        Store in Database
-                                              ↓
-CCTV Video → Motion Detection → Face Detection → Face Embedding
-                                                      ↓
-                                                Compare (Cosine Similarity)
-                                                      ↓
-                                          Match ≥ 0.35 → Green Box (Name + Score)
-                                          Match < 0.35 → Red Box (Unknown)
-                                                      ↓
-                                          Annotated Video + Match Log
-```
-
-### Key Concepts
-| Concept | Description |
-|---------|-------------|
-| **Face Embedding** | 512 numbers that uniquely represent a face |
-| **Cosine Similarity** | Measures how similar two embeddings are (0–1) |
-| **Motion Detection** | Skips static frames to save processing time |
-| **Match Threshold** | 0.35 — scores above this are flagged as matches |
-| **Cooldown** | Prevents duplicate alerts for the same person (5s default) |
-
-## 🛠️ Technologies Used
-
-| Technology | Purpose |
-|-----------|---------|
-| Python 3.10+ | Programming language |
-| OpenCV | Image/video processing |
-| NumPy | Numerical computations |
-| InsightFace | Face detection & recognition AI |
-| ArcFace (w600k_r50) | Face embedding model (512-dim) |
-| ONNX Runtime | Neural network inference |
-
-## 📊 Demo Results
-
-| Person | Similarity Score | Detected At |
-|--------|:---------------:|:-----------:|
-| Person 01 | 75.32% | t=0.60s |
-| Person 02 | 93.84% | t=1.80s |
-| Person 03 | 96.40% | t=3.60s |
-
-## ⏱️ Performance
-
-- **CPU processing:** ~2–3 seconds per motion frame
-- **45-second test video:** ~5–6 minutes total
-- **GPU (CUDA):** 5–10× faster with `onnxruntime-gpu`
-
-## 📝 License
-
-This project is for educational purposes (VIT University — Semester 3 Project Exhibition).
-
-## 👤 Author
-
-Built as part of the Missing Person Identification project for VIT University.
+This starts:
+- **`db`**: PostgreSQL 16 with `pgvector/pgvector:pg16`
+- **`app`**: FastAPI backend with InsightFace model caching and live dashboard on port 8000.

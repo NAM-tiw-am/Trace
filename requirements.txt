@@ -1,4 +1,14 @@
+fastapi>=0.115.0
+uvicorn>=0.32.0
+pydantic>=2.10.0
+pydantic-settings>=2.6.0
+sqlalchemy>=2.0.30
+psycopg>=3.2.0
+psycopg-binary>=3.2.0
+pgvector>=0.3.0
+alembic>=1.13.0
 opencv-python>=4.8.0
 numpy>=1.24.0
 insightface>=0.7.3
 onnxruntime>=1.16.0
+python-multipart>=0.0.12

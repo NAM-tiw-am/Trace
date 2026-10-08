@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TRACE — Missing Person Identification System</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+    <div class="app-layout">
+        <!-- Sidebar Navigation -->
+        <aside class="sidebar">
+            <div class="brand">
+                <div class="brand-logo">
+                    <i class="fa-solid fa-radar fa-spin-pulse"></i>
+                </div>
+                <div class="brand-text">
+                    <h1>TRACE</h1>
+                    <span>AI SURVEILLANCE SUITE</span>
+                </div>
+            </div>
+
+            <nav class="nav-links">
+                <button class="nav-btn active" data-tab="dashboard">
+                    <i class="fa-solid fa-chart-pie"></i>
+                    <span>Overview</span>
+                </button>
+                <button class="nav-btn" data-tab="cases">
+                    <i class="fa-solid fa-folder-open"></i>
+                    <span>Cases</span>
+                </button>
+                <button class="nav-btn" data-tab="persons">
+                    <i class="fa-solid fa-users"></i>
+                    <span>Missing Persons</span>
+                </button>
+                <button class="nav-btn" data-tab="videos">
+                    <i class="fa-solid fa-video"></i>
+                    <span>CCTV Footage</span>
+                </button>
+                <button class="nav-btn" data-tab="sightings">
+                    <i class="fa-solid fa-bullseye"></i>
+                    <span>Sightings & Matches</span>
+                    <span class="badge" id="sightingsBadge">0</span>
+                </button>
+            </nav>
+
+            <div class="sidebar-footer">
+                <div class="system-status">
+                    <span class="status-indicator online"></span>
+                    <div class="status-info">
+                        <strong>InsightFace ArcFace</strong>
+                        <small id="systemStatusText">Engine Ready</small>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Content Area -->
+        <main class="main-content">
+            <!-- Topbar -->
+            <header class="topbar">
+                <div class="page-title">
+                    <h2 id="currentTabTitle">Dashboard Overview</h2>
+                    <p id="currentTabDesc">Real-time surveillance analytics and active facial search alerts</p>
+                </div>
+                <div class="topbar-actions">
+                    <button class="btn btn-outline" onclick="openModal('newCaseModal')">
+                        <i class="fa-solid fa-plus"></i> New Case
+                    </button>
+                    <button class="btn btn-primary" onclick="openModal('newPersonModal')">
+                        <i class="fa-solid fa-user-plus"></i> Register Person
+                    </button>
+                    <button class="btn btn-accent" onclick="openModal('uploadVideoModal')">
+                        <i class="fa-solid fa-cloud-arrow-up"></i> Upload CCTV
+                    </button>
+                </div>
+            </header>
+
+            <div class="content-container">
+                <!-- TAB 1: DASHBOARD -->
+                <section id="dashboardSection" class="tab-section active">
+                    <div class="metrics-grid">
+                        <div class="metric-card">
+                            <div class="metric-icon blue"><i class="fa-solid fa-folder-tree"></i></div>
+                            <div class="metric-body">
+                                <h3>Active Cases</h3>
+                                <div class="metric-value" id="statCases">0</div>
+                            </div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-icon purple"><i class="fa-solid fa-user-shield"></i></div>
+                            <div class="metric-body">
+                                <h3>Registered Persons</h3>
+                                <div class="metric-value" id="statPersons">0</div>
+                            </div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-icon orange"><i class="fa-solid fa-video"></i></div>
+                            <div class="metric-body">
+                                <h3>CCTV Feeds Processed</h3>
+                                <div class="metric-value" id="statVideos">0</div>
+                            </div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-icon green"><i class="fa-solid fa-crosshairs"></i></div>
+                            <div class="metric-body">
+                                <h3>Potential Sightings</h3>
+                                <div class="metric-value" id="statSightings">0</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Active Processing Jobs Banner -->
+                    <div class="card processing-banner" id="activeJobsCard" style="display: none;">
+                        <div class="card-header">
+                            <h3><i class="fa-solid fa-microchip pulse-icon"></i> Active AI Video Scanning Jobs</h3>
+                        </div>
+                        <div class="card-body" id="jobsList"></div>
+                    </div>
+
+                    <!-- Recent Sightings Section -->
+                    <div class="card">
+                        <div class="card-header flex-between">
+                            <h3><i class="fa-solid fa-clock-rotate-left"></i> Latest CCTV Sighting Events</h3>
+                            <button class="btn btn-sm btn-outline" onclick="switchTab('sightings')">View All Sightings</button>
+                        </div>
+                        <div class="card-body">
+                            <div class="sightings-grid" id="recentSightingsGrid">
+                                <div class="empty-state">
+                                    <i class="fa-solid fa-radar fa-2x"></i>
+                                    <p>No sightings detected yet. Upload CCTV footage and run AI search.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- TAB 2: CASES -->
+                <section id="casesSection" class="tab-section">
+                    <div class="card">
+                        <div class="card-header flex-between">
+                            <h3>All Investigation Cases</h3>
+                            <button class="btn btn-primary" onclick="openModal('newCaseModal')"><i class="fa-solid fa-plus"></i> Add Case</button>
+                        </div>
+                        <div class="card-body">
+                            <div class="table-responsive">
+                                <table class="data-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Case #</th>
+                                            <th>Title</th>
+                                            <th>Status</th>
+                                            <th>Registered</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="casesTableBody">
+                                        <tr><td colspan="5" class="text-center">Loading cases...</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- TAB 3: PERSONS -->
+                <section id="personsSection" class="tab-section">
+                    <div class="card">
+                        <div class="card-header flex-between">
+                            <h3>Missing Persons Registry</h3>
+                            <button class="btn btn-primary" onclick="openModal('newPersonModal')"><i class="fa-solid fa-user-plus"></i> Register Person</button>
+                        </div>
+                        <div class="card-body">
+                            <div class="persons-grid" id="personsGrid">
+                                <div class="empty-state">
+                                    <i class="fa-solid fa-user-slash fa-2x"></i>
+                                    <p>No persons registered. Register a missing person to begin face search.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- TAB 4: VIDEOS -->
+                <section id="videosSection" class="tab-section">
+                    <div class="card">
+                        <div class="card-header flex-between">
+                            <h3>CCTV Video Footage Library</h3>
+                            <button class="btn btn-accent" onclick="openModal('uploadVideoModal')"><i class="fa-solid fa-upload"></i> Upload Video</button>
+                        </div>
+                        <div class="card-body">
+                            <div class="videos-grid" id="videosGrid">
+                                <div class="empty-state">
+                                    <i class="fa-solid fa-film fa-2x"></i>
+                                    <p>No CCTV videos uploaded yet. Upload MP4 videos to initiate facial scan.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- TAB 5: SIGHTINGS -->
+                <section id="sightingsSection" class="tab-section">
+                    <div class="card">
+                        <div class="card-header flex-between">
+                            <div>
+                                <h3>Verified & Potential Sightings</h3>
+                                <p class="text-muted">Review detected faces, inspect snapshots, and confirm or reject matches.</p>
+                            </div>
+                            <div class="filter-group">
+                                <select id="sightingStatusFilter" class="form-input" onchange="loadSightings()">
+                                    <option value="">All Statuses</option>
+                                    <option value="POTENTIAL_MATCH">Potential Matches</option>
+                                    <option value="CONFIRMED">Confirmed</option>
+                                    <option value="REVIEWED">Reviewed</option>
+                                    <option value="REJECTED">Rejected</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <div class="sightings-grid" id="allSightingsGrid">
+                                <div class="empty-state">
+                                    <i class="fa-solid fa-eye fa-2x"></i>
+                                    <p>No sightings found matching criteria.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </main>
+    </div>
+
+    <!-- MODAL: NEW CASE -->
+    <div class="modal" id="newCaseModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Create New Case</h3>
+                <button class="close-btn" onclick="closeModal('newCaseModal')">&times;</button>
+            </div>
+            <form id="newCaseForm" onsubmit="handleCreateCase(event)">
+                <div class="form-group">
+                    <label>Case Number / Code *</label>
+                    <input type="text" id="caseNumber" required placeholder="e.g. CASE-2026-001" class="form-input">
+                </div>
+                <div class="form-group">
+                    <label>Title</label>
+                    <input type="text" id="caseTitle" placeholder="e.g. Missing Child Search - Central Station" class="form-input">
+                </div>
+                <div class="form-group">
+                    <label>Description</label>
+                    <textarea id="caseDescription" rows="3" class="form-input" placeholder="Investigation details and timeline..."></textarea>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-outline" onclick="closeModal('newCaseModal')">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Create Case</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL: REGISTER PERSON -->
+    <div class="modal" id="newPersonModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Register Missing Person</h3>
+                <button class="close-btn" onclick="closeModal('newPersonModal')">&times;</button>
+            </div>
+            <form id="newPersonForm" onsubmit="handleCreatePerson(event)">
+                <div class="form-group">
+                    <label>Assign to Case *</label>
+                    <select id="personCaseId" required class="form-input"></select>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Full Name *</label>
+                        <input type="text" id="personName" required placeholder="e.g. Rahul Sharma" class="form-input">
+                    </div>
+                    <div class="form-group">
+                        <label>Age</label>
+                        <input type="number" id="personAge" placeholder="28" class="form-input">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Gender</label>
+                        <select id="personGender" class="form-input">
+                            <option value="">Select Gender</option>
+                            <option value="Male">Male</option>
+                            <option value="Female">Female</option>
+                            <option value="Other">Other</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Last Known Location</label>
+                        <input type="text" id="personLocation" placeholder="e.g. Metro Gate 3" class="form-input">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Physical Description / Distinguishing Features</label>
+                    <textarea id="personDescription" rows="2" class="form-input" placeholder="Height, clothes worn, scars, etc..."></textarea>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-outline" onclick="closeModal('newPersonModal')">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Register Person</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL: UPLOAD PHOTO -->
+    <div class="modal" id="uploadPhotoModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Upload Reference Photo</h3>
+                <button class="close-btn" onclick="closeModal('uploadPhotoModal')">&times;</button>
+            </div>
+            <form id="uploadPhotoForm" onsubmit="handleUploadPhoto(event)">
+                <input type="hidden" id="uploadPhotoPersonId">
+                <p class="text-muted mb-2">Upload a clear frontal face photograph. ArcFace will detect the face and extract a 512-D embedding.</p>
+                <div class="file-dropzone" onclick="document.getElementById('personPhotoInput').click()">
+                    <i class="fa-solid fa-camera fa-2x"></i>
+                    <p id="photoFileLabel">Click or drop image file here</p>
+                    <input type="file" id="personPhotoInput" accept="image/*" style="display:none" onchange="handleFileSelected(this, 'photoFileLabel')">
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-outline" onclick="closeModal('uploadPhotoModal')">Cancel</button>
+                    <button type="submit" class="btn btn-primary" id="btnUploadPhoto">Extract & Store Embedding</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL: UPLOAD VIDEO -->
+    <div class="modal" id="uploadVideoModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Upload CCTV Footage</h3>
+                <button class="close-btn" onclick="closeModal('uploadVideoModal')">&times;</button>
+            </div>
+            <form id="uploadVideoForm" onsubmit="handleUploadVideo(event)">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Camera Identifier *</label>
+                        <input type="text" id="videoCameraName" required placeholder="e.g. Camera 04 - Terminal Exit" class="form-input">
+                    </div>
+                    <div class="form-group">
+                        <label>Location</label>
+                        <input type="text" id="videoLocation" placeholder="e.g. Platform 2 West" class="form-input">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Related Case (Optional)</label>
+                    <select id="videoCaseId" class="form-input"></select>
+                </div>
+                <div class="file-dropzone" onclick="document.getElementById('videoFileInput').click()">
+                    <i class="fa-solid fa-film fa-2x"></i>
+                    <p id="videoFileLabel">Click or drop MP4 video file here</p>
+                    <input type="file" id="videoFileInput" accept="video/mp4,video/*" required style="display:none" onchange="handleFileSelected(this, 'videoFileLabel')">
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-outline" onclick="closeModal('uploadVideoModal')">Cancel</button>
+                    <button type="submit" class="btn btn-accent" id="btnUploadVideo">Upload CCTV Video</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL: SIGHTING INSPECTION / VIDEO PLAYER -->
+    <div class="modal" id="sightingDetailModal">
+        <div class="modal-content modal-lg">
+            <div class="modal-header">
+                <h3 id="modalSightingTitle">Sighting Evidence Inspection</h3>
+                <button class="close-btn" onclick="closeModal('sightingDetailModal')">&times;</button>
+            </div>
+            <div class="modal-body" id="modalSightingBody">
+                <!-- Dynamically populated -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toastNotification" class="toast"></div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>

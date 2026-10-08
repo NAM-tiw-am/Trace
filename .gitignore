@@ -37,3 +37,24 @@ phase2/videos/output/
 phase2/data/missing_persons.json
 phase2/results/match_log.json
 Phase 1/src/results/
+
+# Environment and secrets
+.env
+*.env
+
+# SQLite and databases
+*.db
+*.sqlite
+*.sqlite3
+
+# Test caches
+.pytest_cache/
+
+# Storage contents (keep directories via .gitkeep)
+storage/photos/*
+!storage/photos/.gitkeep
+storage/snapshots/*
+!storage/snapshots/.gitkeep
+storage/videos/*
+!storage/videos/.gitkeep
+storage/*.db
