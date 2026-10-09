@@ -3,7 +3,7 @@ import uuid
 import shutil
 from pathlib import Path
 from fastapi import UploadFile
-from app.core.config import settings
+from app.core.config import settings, PROJECT_ROOT
 
 class StorageService:
     @staticmethod
@@ -12,7 +12,7 @@ class StorageService:
         p = Path(path_str)
         if p.is_absolute():
             return p
-        return (settings.PROJECT_ROOT / p).resolve()
+        return (PROJECT_ROOT / p).resolve()
 
     @staticmethod
     def to_relative_storage_path(path_str: str | Path) -> str:
